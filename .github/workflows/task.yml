@@ -1,0 +1,114 @@
+name: Check Update and Upload Releases
+
+on:
+  push: 
+    branches: main
+  workflow_dispatch:
+  schedule:
+    - cron: '33 */3 * * *'
+env:
+  CHROME_FETCHES_DIR: /builds/worker/fetches
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    - name: Check Update
+      run: go run . fetch
+
+    - name: Download Latest Stable Releases
+      run: go run . download win_stable_x64
+
+    - name: Check for EXE Files
+      id: check_files
+      run: |
+        if find . -name "*.exe" -print -quit | grep -q .; then
+          echo "exe_exists=true" >> $GITHUB_ENV
+        else
+          echo "exe_exists=false" >> $GITHUB_ENV
+        fi
+
+    - name: download tools
+      if: env.exe_exists == 'true'
+      id: env_download
+      run: |
+        sudo mkdir -p "$CHROME_FETCHES_DIR"
+        sudo chown runner:runner -R "$CHROME_FETCHES_DIR"
+        cd "$CHROME_FETCHES_DIR"
+        wget https://master.dl.sourceforge.net/project/libportable/Mozillabuild/7zz.tar.xz?viasf=1 -O 7zz.tar.xz
+        if [ $? -ne 0 ]; then
+          echo Download 7zz failed
+          exit 255
+        fi
+        tar Jxf 7zz.tar.xz -C "$CHROME_FETCHES_DIR"
+        chmod -R 755 "$CHROME_FETCHES_DIR/7zz"
+        wget https://github.com/yxl0756/actions_test/releases/download/v1/wine.tar.xz -O wine.tar.xz
+        if [ $? -ne 0 ]; then
+          echo Download wine failed
+          exit 255
+        fi
+        tar Jxf wine.tar.xz -C "$CHROME_FETCHES_DIR"
+        chmod -R 755 "$CHROME_FETCHES_DIR/wine"
+        wget https://github.com/adonais/libportable/releases/latest/download/msedge64++.7z
+        if [ $? -ne 0 ]; then
+          echo Download msedge64++ failed
+          exit 255
+        fi
+        if [ ! -f chrome_repack.sh ]; then cp "$GITHUB_WORKSPACE/chrome_repack.sh" .; fi
+        mv $GITHUB_WORKSPACE/*.exe .
+        ls -la
+        chmod +x ./chrome_repack.sh
+        ./chrome_repack.sh
+        if [ -f "GoogleChrome_X64_Laster.7z" ]; then echo "chrome7z_exists=true" >> $GITHUB_ENV; fi
+      shell: bash
+
+    - name: Check if Tag Exists
+      id: check_tag
+      run: |
+        if git rev-parse "refs/tags/${{ env.latest_version }}" >/dev/null 2>&1; then
+          echo "tag_exists=true" >> $GITHUB_ENV
+        else
+          echo "tag_exists=false" >> $GITHUB_ENV
+        fi
+
+    - name: Commit Files
+      env:
+        TZ: America/New_York
+      run: |
+        git config --local user.email "64341812+github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add .
+        git commit -m ":pencil: Auto update Chrome at $(date +'%Y-%m-%d %H:%M')" -a || echo "No changes to commit"
+
+    - name: Push Changes
+      run: |
+        git push origin main
+
+    - name: Create Tag
+      if: env.chrome7z_exists == 'true' && env.tag_exists == 'false'
+      run: |
+        git tag ${{ env.latest_version }}
+        git push origin ${{ env.latest_version }}
+
+    - name: Upload Release
+      if: env.chrome7z_exists == 'true' && env.tag_exists == 'false'
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ env.latest_version }}
+        files: '${{ env.CHROME_FETCHES_DIR }}/GoogleChrome_X64_Laster.7z'
+
+    - name: Reset Main Branch
+      if: env.chrome7z_exists == 'true' && env.tag_exists == 'false'
+      run: |
+        git checkout --orphan temp_branch
+        git add -A
+        git commit -m "first commit"
+        git push --force origin temp_branch:main
