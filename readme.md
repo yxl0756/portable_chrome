@@ -19,7 +19,7 @@
 
 1. 从 [Releases](https://github.com/yxl0756/portable_chrome/releases/latest) 下载发布的新版本
 2. 关闭Chrome浏览器, 解压直接覆盖到Chrome目录, 你可以在之后删除App目录下以数字号命名的旧版目录
-3. 关注chrome++(example).ini配置文件的变更, 或许会加入便携式版本的自动更新功能
+3. 默认支持自动更新, 取消更新见 chrome++(example).ini 配置文件说明
 
 ## 功能特性
 
@@ -32,6 +32,7 @@
 - 改写代码, 自带的示例配置文件不会覆盖用户的配置文件
 - 改进代码, 在无写权限的目录忽略data_dir与cache_dir选项
 - 注入时静态修改resources.pak, 屏蔽升级错误, 以及默认浏览器选项
+- 支持Edge/Chrome便携版自动更新
 - 更多增强功能请查看 chrome++(example).ini
 
 <details>
